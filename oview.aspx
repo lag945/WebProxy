@@ -1,45 +1,39 @@
 <%@ Page Language="C#" %>
+
 <script runat="server">
+
     private void Page_Load(object sender, EventArgs e)
     {
-        //把aspx串的參數接到新url上
-        //string ClientQueryString = HttpUtility.UrlDecode(Page.ClientQueryString);
-        //string url = "http://127.0.0.1:8080/oview?" + ClientQueryString;
-        string url;
-        //if (Page.ClientQueryString.IndexOf("resource=") == 0)
-        //{
-        //    url= "http://127.0.0.1:8080/resource?" + Page.ClientQueryString;
-        //}
-        //else if (Page.ClientQueryString.IndexOf("type=") == 0)
-        //{
-        //    url= "http://127.0.0.1:8080/oview?" + Page.ClientQueryString;
-        //}
-        //else
+        string url = HttpUtility.UrlDecode(Page.ClientQueryString);
+
+        if (!ValidateWhiteList(url))
         {
-            url=HttpUtility.UrlDecode(Page.ClientQueryString);
+            Response.StatusCode = 403;
+            Response.StatusDescription = "Forbidden:Target url not be allowed by administrator.";
+            return;
         }
-        //判斷是GET還是POST
-        bool bPOST = Request.InputStream.Length > 0;
+        // check is post
+        bool post = Request.InputStream.Length > 0;
         byte[] postBuffer = null;
-        if (bPOST)//取得POST資料
+        if (post) // get post data
         {
             postBuffer = new byte[Request.InputStream.Length];
             Request.InputStream.Read(postBuffer, 0, postBuffer.Length);
         }
+
         System.Net.HttpWebRequest req = System.Net.WebRequest.Create(url) as System.Net.HttpWebRequest;
-        req.Method = bPOST ? "POST" : "GET";
-		if (bPOST)
-		{
-			req.ContentLength = postBuffer.Length;
-			req.ContentType = "application/json";
-		}		
+        req.Method = post ? "POST" : "GET";
+        if (post)// for pilotgaea docmd only
+        {
+            req.ContentLength = postBuffer.Length;
+            req.ContentType = "application/json";
+        }
         req.UserAgent = "PilotGaea Proxy Server";
 
-        //複製檔頭的cookie
+        // copy cookie
         NameValueCollection headers = Request.Headers;
         for (int i = 0; i < headers.Count; i++)
         {
-            //Response.Write(headers.GetKey(i) + ":" + headers.Get(i) + "<BR>");
             if (headers.GetKey(i) == "Cookie")
             {
                 req.Headers.Set("Cookie", headers.Get(i));
@@ -50,31 +44,30 @@
         byte[] retBuffer = null;
         try
         {
-            if (bPOST)
+            if (post)
             {
                 //上傳
                 System.IO.Stream stream_req = req.GetRequestStream();
                 stream_req.Write(postBuffer, 0, postBuffer.Length);
-				stream_req.Flush();
-				stream_req.Close();				
+                stream_req.Flush();
+                stream_req.Close();
             }
 
             System.Net.HttpWebResponse res = req.GetResponse() as System.Net.HttpWebResponse;
             System.IO.Stream stream_res = res.GetResponseStream();
-            //retBuffer = new byte[stream_res.Length];
-            //stream_res.Read(retBuffer, 0, (int)stream_res.Length);
             int len = 1024 * 1024;
-            byte[] tmpBuffer = new byte[len];//一次1MB
+            byte[] tmpBuffer = new byte[len];// 1 mb once
             int readlen = 0;
             System.IO.MemoryStream ms = new System.IO.MemoryStream();
-            do {
+            do
+            {
                 readlen = stream_res.Read(tmpBuffer, 0, len);
                 ms.Write(tmpBuffer, 0, readlen);
             }
-            while (readlen>0);
+            while (readlen > 0);
             retBuffer = ms.ToArray();
 
-            //複製回應的檔頭
+            // copy header to response
             for (int i = 0; i < res.Headers.Count; i++)
             {
                 string[] s = res.Headers.GetValues(i);
@@ -96,20 +89,21 @@
                 else if (k == "Last-Modified")
                 {
                     Response.Headers.Set(k, v);
-                }				
+                }
                 else if (k == "Content-Encoding")
                 {
                     Response.Headers.Set(k, v);
-                }						
+                }
                 //else
                 //{
                 //    Response.Headers.Set(k, v);
                 //}
             }
-            //寫入回應的本文
+            // write content of response
             Response.BinaryWrite(retBuffer);
         }
-        catch(System.Net.WebException ex) {
+        catch (System.Net.WebException ex)
+        {
             if (ex.Response != null)
             {
                 Response.StatusCode = (int)(((System.Net.HttpWebResponse)ex.Response).StatusCode);
@@ -117,15 +111,42 @@
             }
             else
             {
-                //通常是伺服器沒開
+                // Server maybe crashed...
                 Response.StatusCode = 500;
                 Response.StatusDescription = "Internal Server error:" + ex.Message;
             }
         }
-        catch(Exception ex) {
+        catch (Exception ex)
+        {
             Response.StatusCode = 404;
             Response.StatusDescription = "File not found:" + ex.Message;
         }
     }
 
+    private bool ValidateWhiteList(string url)
+    {
+        bool ret = false;
+        List<string> whiteList = new List<string>();
+        //whiteList.Add("http://127.0.0.1");
+        if (whiteList.Count == 0)
+        {
+            // no white list == all pass.
+            ret = true;
+        }
+        else
+        {
+            // must validate white list
+            foreach (string s in whiteList)
+            {
+                //if (url.StartsWith(s))
+                if (url.ToLower().StartsWith(s.ToLower()))// CompareNoCase
+                {
+                    ret = true;
+                    break;
+                }
+            }
+        }
+
+        return ret;
+    }
 </script>
