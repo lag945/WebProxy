@@ -1,7 +1,7 @@
 <%@ Page Language="C#" %>
 
 <script runat="server">
-
+// source: https://github.com/PilotGaeaRD/WebProxy/blob/master/oviewTLS12.aspx
     private void Page_Load(object sender, EventArgs e)
     {
 		// fixed "The request was aborted: Could not create SSL/TLS secure channel¡C"
